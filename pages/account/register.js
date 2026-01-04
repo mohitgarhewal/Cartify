@@ -14,6 +14,8 @@ export default function Register() {
     password: '',
     confirmPassword: '',
   });
+  // Fix: Add error state for registration errors
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     setFormData({
@@ -22,21 +24,57 @@ export default function Register() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
+    // Updated: Use backend API for registration
     e.preventDefault();
-    
+    setError(""); // Clear previous errors
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
-
-    // This is UI only - no actual authentication
-    alert('This is a demo. No actual registration will be performed.');
-    router.push('/account/login');
+    try {
+      const { firstName, lastName, email, password } = formData;
+      // Call backend register endpoint using API client
+      const res = await import('@/lib/apiClient').then(mod =>
+        mod.apiRequest("/auth/register", {
+          method: "POST",
+          body: JSON.stringify({ firstName, lastName, email, password }),
+        })
+      );
+      if (res.user) {
+        router.push("/account/login");
+      } else if (res.error) {
+        // Show backend error (e.g., email already registered) to user
+        setError(res.error);
+      } else if (res.message) {
+        // Show any other message
+        setError(res.message);
+      } else {
+        setError("Registration failed");
+      }
+    } catch (err) {
+      // Show common client errors, log backend/unknown errors
+      if (err.message && (
+        err.message.includes("Passwords do not match") ||
+        err.message.includes("Email and password required") ||
+        err.message.includes("Invalid email format") ||
+        err.message.includes("Password too short")
+      )) {
+        setError(err.message);
+      } else {
+        setError("Registration error");
+        // Log unexpected/backend errors for debugging
+        console.error("Registration error:", err);
+      }
+    }
   };
 
   return (
     <Layout>
+      {/* Show error message if registration fails */}
+      {error && (
+        <div className="mb-4 text-red-600 text-center">{error}</div>
+      )}
       <Head>
         <title>Register - Cartify</title>
         <meta name="description" content="Create your Cartify account" />

@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import { apiRequest } from '@/lib/apiClient';
+import { getToken } from '@/lib/auth';
+import { isLoggedIn } from '@/lib/auth'; // Import auth utility
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
@@ -24,6 +27,13 @@ export default function Checkout() {
   });
 
   useEffect(() => {
+    // Protect this route: redirect to login if not authenticated
+    if (!isLoggedIn()) {
+      // Interview: Protects checkout, only logged-in users can access
+      router.replace('/account/login');
+      return;
+    }
+    // Existing logic: redirect to cart if cart is empty
     if (cart.length === 0) {
       router.push('/cart');
     }
@@ -36,12 +46,35 @@ export default function Checkout() {
     });
   };
 
-  const handleSubmit = (e) => {
+  // Integrate checkout with backend: send order data to backend
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // This is UI only - no actual payment processing
-    alert('This is a demo checkout. No actual payment will be processed.');
-    clearCart();
-    router.push('/');
+    setError("");
+    setLoading(true);
+    try {
+      // Prepare order data
+      const orderData = {
+        ...formData,
+        items: cart,
+        total: getCartTotal(),
+      };
+      // Send order to backend, include auth token
+      await apiRequest("/orders", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(orderData),
+      });
+      clearCart();
+      router.push("/");
+    } catch (err) {
+      setError(err.message || "Checkout failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (cart.length === 0) {
@@ -53,6 +86,7 @@ export default function Checkout() {
   const tax = subtotal * 0.08;
   const total = subtotal + shipping + tax;
 
+  // Show error if checkout fails
   return (
     <Layout>
       <Head>
@@ -62,6 +96,12 @@ export default function Checkout() {
       </Head>
 
       <div className="bg-gray-50 min-h-screen">
+        {error && (
+          <div className="mb-4 text-red-600 text-center">{error}</div>
+        )}
+        {loading && (
+          <div className="mb-4 text-blue-600 text-center">Processing order...</div>
+        )}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-8">Checkout</h1>
 

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { motion } from 'framer-motion';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function Login() {
   const router = useRouter();
@@ -11,6 +12,8 @@ export default function Login() {
     email: '',
     password: '',
   });
+  // Fix: Add error state for login errors
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     setFormData({
@@ -19,11 +22,54 @@ export default function Login() {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
+    // Updated: Use backend API for authentication
     e.preventDefault();
-    // This is UI only - no actual authentication
-    alert('This is a demo. No actual authentication will be performed.');
-    router.push('/');
+    setError(""); // Clear previous errors
+    try {
+      const { email, password } = formData;
+      // Call backend login endpoint using API client
+      const res = await import('@/lib/apiClient').then(mod =>
+        mod.apiRequest("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        })
+      );
+      // Accept either access_token or token for compatibility
+      const token = res.access_token || res.token;
+      if (token) {
+        localStorage.setItem("token", token);
+        router.push("/");
+      } else {
+        // Show error from backend, or fallback
+        setError(res.error || res.message || "User not found or invalid credentials");
+      }
+    } catch (err) {
+      setError(err.message || "Login error");
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'http://localhost:3000/auth/callback',
+          skipBrowserRedirect: true, // attempt popup first
+        },
+      });
+
+      if (error) throw error;
+
+      // Popup may be blocked; fallback to full redirect
+      if (data?.url) {
+        window.location.assign(data.url);
+      }
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed');
+      console.error('Google login error:', err);
+    }
   };
 
   return (
@@ -34,7 +80,11 @@ export default function Login() {
         <meta name="robots" content="noindex" />
       </Head>
 
+      {/* Show error message if login fails */}
       <div className="bg-gray-50 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        {error && (
+          <div className="mb-4 text-red-600 text-center">{error}</div>
+        )}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -47,6 +97,20 @@ export default function Login() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  className="w-full flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none"
+                >
+                  <span>Continue with Google</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-gray-200" />
+                  <span className="text-xs uppercase text-gray-400">or</span>
+                  <div className="h-px flex-1 bg-gray-200" />
+                </div>
+
               <div>
                 <label htmlFor="email" className="block text-sm font-medium mb-2">
                   Email Address

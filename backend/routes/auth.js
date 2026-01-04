@@ -14,17 +14,57 @@ function validateAuthInput(email, password) {
   return null;
 }
 
-// Signup
-router.post('/signup', async (req, res) => {
+// Signup (supports email confirmation; session may be null until confirmed)
+router.post('/register', async (req, res) => {
   const { email, password } = req.body;
   const errorMsg = validateAuthInput(email, password);
   if (errorMsg) return res.status(400).json({ error: errorMsg });
   try {
-    const { data, error } = await supabase.auth.admin.createUser({ email, password });
-    if (error) return res.status(400).json({ error: error.message });
-    res.status(201).json({ user: data.user });
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: false, // allow confirmation email to be sent
+    });
+
+    if (error) {
+      console.error('Supabase signup error:', error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    // In confirmation-required mode, session is null. This is expected.
+    return res.status(201).json({
+      userId: data.user.id,
+      message: 'User created. Please check your email to confirm.',
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error('Registration error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Resend confirmation email
+router.post('/resend-confirmation', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: 'http://localhost:3000/auth/callback',
+      },
+    });
+
+    if (error) {
+      console.error('Resend confirmation error:', error);
+      return res.status(400).json({ error: error.message });
+    }
+
+    return res.json({ message: 'Confirmation email sent' });
+  } catch (err) {
+    console.error('Resend confirmation error:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -35,7 +75,10 @@ router.post('/login', async (req, res) => {
   if (errorMsg) return res.status(400).json({ error: errorMsg });
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return res.status(401).json({ error: error.message });
+    if (error) {
+      console.error('Supabase login error:', error);
+      return res.status(401).json({ error: error.message });
+    }
     res.json({ access_token: data.session.access_token, user: data.user });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
