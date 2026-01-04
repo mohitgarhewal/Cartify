@@ -9,11 +9,10 @@ A modern, full-stack e-commerce web application built with Next.js and Supabase.
 ## ✨ Key Features
 
 - 🔐 **Google OAuth Authentication** - Secure, one-click login with Google
-- 📧 **Email Verification** - Account confirmation via email before access
-- 👤 **User Profile** - Personalized profile page with account details
+- � **User Profile** - Personalized profile page with account details
 - 🛒 **Shopping Cart** - Add, remove, and manage cart items with persistence
 - 📦 **Order Management** - Complete checkout flow and order history
-- 🔒 **Row Level Security (RLS)** - Database-level security policies protecting user data
+- 💳 **Razorpay Payment Gateway** - Secure online payments integration
 - 🚪 **Session Management** - Secure logout with session cleanup
 - 📱 **Responsive Design** - Optimized for all devices
 - ⚡ **Fast Performance** - Server-side rendering with Next.js
@@ -32,8 +31,9 @@ A modern, full-stack e-commerce web application built with Next.js and Supabase.
 
 ### Authentication & Database
 - **Supabase Auth** - Authentication service with Google OAuth
-- **Supabase (PostgreSQL)** - Database with Row Level Security
+- **Supabase (PostgreSQL)** - Database for user data and orders
 - **Google OAuth 2.0** - Social login provider
+- **Razorpay** - Payment gateway integration
 
 ### Hosting & Deployment
 - **Vercel** - Frontend and serverless functions
@@ -41,23 +41,18 @@ A modern, full-stack e-commerce web application built with Next.js and Supabase.
 
 ## 🔐 Authentication & Security
 
-### Email Verification
-New users must verify their email address before gaining access to protected features. Supabase automatically sends confirmation emails upon registration.
-
 ### Google OAuth
 Users can authenticate using their Google account, providing a seamless and secure login experience without managing passwords.
-
-### Row Level Security (RLS)
-Supabase RLS policies ensure that:
-- Users can only access their own cart items
-- Users can only view their own orders
-- Profile data is isolated per user
-- All database queries are automatically filtered by user identity
 
 ### Session Management
 - Sessions are securely stored and managed by Supabase
 - Logout functionality clears both client and server sessions
 - Automatic session refresh on page load
+
+### Payment Security
+- Razorpay handles secure payment processing
+- PCI DSS compliant payment gateway
+- Support for multiple payment methods (cards, UPI, wallets, net banking)
 
 ## 📋 Environment Variables
 
@@ -77,6 +72,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 PORT=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
 ```
 
 **Note:** Never commit your `.env` files to version control. Add `.env*` to your `.gitignore`.
