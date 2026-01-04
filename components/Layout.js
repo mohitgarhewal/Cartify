@@ -1,11 +1,39 @@
 import Link from 'next/link';
 import { useCart } from '@/lib/CartContext';
+import { useAuth } from '@/hooks/useAuth';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/router';
 
 export default function Layout({ children }) {
   const { getCartCount } = useCart();
+  const { user, signOut, isLoading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const router = useRouter();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSignOut = async (scope = 'local') => {
+    try {
+      await signOut(scope);
+      setDropdownOpen(false);
+      router.push('/');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      alert('Failed to sign out');
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -25,9 +53,79 @@ export default function Layout({ children }) {
               <Link href="/collection" className="text-gray-700 hover:text-primary-600 transition-colors">
                 Collection
               </Link>
-              <Link href="/account/login" className="text-gray-700 hover:text-primary-600 transition-colors">
-                Account
-              </Link>
+              
+              {/* Auth UI */}
+              {isLoading ? (
+                <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse" />
+              ) : user ? (
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    className="flex items-center space-x-2 text-gray-700 hover:text-primary-600 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-semibold">
+                      {user.email?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                    <span className="text-sm">{user.email?.split('@')[0]}</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {dropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg py-2 z-50"
+                    >
+                      <div className="px-4 py-2 border-b">
+                        <p className="text-sm font-semibold text-gray-900">{user.email}</p>
+                        <p className="text-xs text-gray-500">{user.user_metadata?.display_name || 'User'}</p>
+                      </div>
+                      
+                      <Link 
+                        href="/profile" 
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setDropdownOpen(false)}
+                      >
+                        Profile
+                      </Link>
+                      
+                      <Link 
+                        href="/profile#sessions" 
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setDropdownOpen(false)}
+                      >
+                        Manage Sessions
+                      </Link>
+                      
+                      <button
+                        onClick={() => handleSignOut('local')}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        Sign Out
+                      </button>
+                      
+                      <button
+                        onClick={() => handleSignOut('global')}
+                        className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 border-t"
+                      >
+                        Sign Out Everywhere
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <Link href="/account/login" className="text-gray-700 hover:text-primary-600 transition-colors">
+                    Login
+                  </Link>
+                  <Link href="/account/register" className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Cart Icon */}

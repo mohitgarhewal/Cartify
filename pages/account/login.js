@@ -4,71 +4,72 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { motion } from 'framer-motion';
-import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Login() {
   const router = useRouter();
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  // Fix: Add error state for login errors
-  const [error, setError] = useState("");
+  const { signIn, signInWithOAuth, resetPassword } = useAuth();
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
-    // Updated: Use backend API for authentication
     e.preventDefault();
-    setError(""); // Clear previous errors
+    setError('');
+    setLoading(true);
     try {
-      const { email, password } = formData;
-      // Call backend login endpoint using API client
-      const res = await import('@/lib/apiClient').then(mod =>
-        mod.apiRequest("/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ email, password }),
-        })
-      );
-      // Accept either access_token or token for compatibility
-      const token = res.access_token || res.token;
-      if (token) {
-        localStorage.setItem("token", token);
-        router.push("/");
-      } else {
-        // Show error from backend, or fallback
-        setError(res.error || res.message || "User not found or invalid credentials");
-      }
+      await signIn(formData.email, formData.password);
+      router.push('/');
     } catch (err) {
-      setError(err.message || "Login error");
+      // Handle specific errors
+      if (err.message?.includes('Email not confirmed')) {
+        setError('Please confirm your email before logging in. Check your inbox.');
+      } else if (err.message?.includes('Invalid login credentials')) {
+        setError('Invalid email or password');
+      } else if (err.message?.includes('Email rate limit exceeded')) {
+        setError('Too many login attempts. Please try again later.');
+      } else {
+        setError(err.message || 'Login failed');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    setError("");
+    setError('');
+    setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: 'http://localhost:3000/auth/callback',
-          skipBrowserRedirect: true, // attempt popup first
-        },
+      const { url } = await signInWithOAuth('google', {
+        skipBrowserRedirect: true,
       });
-
-      if (error) throw error;
-
-      // Popup may be blocked; fallback to full redirect
-      if (data?.url) {
-        window.location.assign(data.url);
-      }
+      if (url) window.location.assign(url);
     } catch (err) {
       setError(err.message || 'Google sign-in failed');
-      console.error('Google login error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!formData.email) {
+      setError('Please enter your email address first');
+      return;
+    }
+    setLoading(true);
+    try {
+      await resetPassword(formData.email);
+      alert('Password reset email sent! Check your inbox.');
+      setShowForgotPassword(false);
+    } catch (err) {
+      setError(err.message || 'Failed to send reset email');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -82,9 +83,6 @@ export default function Login() {
 
       {/* Show error message if login fails */}
       <div className="bg-gray-50 min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        {error && (
-          <div className="mb-4 text-red-600 text-center">{error}</div>
-        )}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -96,20 +94,27 @@ export default function Login() {
               <p className="text-gray-600">Login to your account</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  className="w-full flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none"
-                >
-                  <span>Continue with Google</span>
-                </button>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-600 text-sm">
+                {error}
+              </div>
+            )}
 
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  <span className="text-xs uppercase text-gray-400">or</span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none disabled:opacity-50"
+              >
+                <span>{loading ? 'Loading...' : 'Continue with Google'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-xs uppercase text-gray-400">or</span>
+                <div className="h-px flex-1 bg-gray-200" />
+              </div>
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium mb-2">
@@ -122,7 +127,8 @@ export default function Login() {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  className="input-field"
+                  disabled={loading}
+                  className="input-field disabled:opacity-50"
                   placeholder="your@email.com"
                 />
               </div>
@@ -138,40 +144,72 @@ export default function Login() {
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  className="input-field"
+                  disabled={loading}
+                  className="input-field disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <input
-                    id="remember"
-                    name="remember"
-                    type="checkbox"
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="remember" className="ml-2 block text-sm text-gray-700">
-                    Remember me
-                  </label>
-                </div>
-
-                <div className="text-sm">
-                  <a href="#" className="text-primary-600 hover:text-primary-700">
-                    Forgot password?
-                  </a>
-                </div>
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-sm text-primary-600 hover:text-primary-700"
+                >
+                  Forgot password?
+                </button>
               </div>
 
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: loading ? 1 : 1.02 }}
+                whileTap={{ scale: loading ? 1 : 0.98 }}
                 type="submit"
-                className="w-full btn-primary"
+                disabled={loading}
+                className="w-full btn-primary disabled:opacity-50"
               >
-                Sign In
+                {loading ? 'Signing in...' : 'Sign In'}
               </motion.button>
             </form>
+
+            {/* Forgot Password Modal */}
+            {showForgotPassword && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-white rounded-lg p-6 max-w-md w-full"
+                >
+                  <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Enter your email address and we'll send you a link to reset your password.
+                  </p>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    name="email"
+                    placeholder="your@email.com"
+                    className="input-field mb-4"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleForgotPassword}
+                      disabled={loading}
+                      className="flex-1 btn-primary disabled:opacity-50"
+                    >
+                      {loading ? 'Sending...' : 'Send Reset Link'}
+                    </button>
+                    <button
+                      onClick={() => setShowForgotPassword(false)}
+                      disabled={loading}
+                      className="flex-1 btn-secondary disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
 
             <div className="mt-6">
               <div className="relative">

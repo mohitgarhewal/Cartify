@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Register() {
   const router = useRouter();
+  const { signUp, signInWithOAuth, resendConfirmation } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -14,67 +16,85 @@ export default function Register() {
     password: '',
     confirmPassword: '',
   });
-  // Fix: Add error state for registration errors
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
-    // Updated: Use backend API for registration
     e.preventDefault();
-    setError(""); // Clear previous errors
+    setError('');
+    setSuccess(false);
+
     if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match");
+      setError('Passwords do not match');
       return;
     }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const { firstName, lastName, email, password } = formData;
-      // Call backend register endpoint using API client
-      const res = await import('@/lib/apiClient').then(mod =>
-        mod.apiRequest("/auth/register", {
-          method: "POST",
-          body: JSON.stringify({ firstName, lastName, email, password }),
-        })
-      );
-      if (res.user) {
-        router.push("/account/login");
-      } else if (res.error) {
-        // Show backend error (e.g., email already registered) to user
-        setError(res.error);
-      } else if (res.message) {
-        // Show any other message
-        setError(res.message);
-      } else {
-        setError("Registration failed");
+      const { user, session } = await signUp(formData.email, formData.password);
+      
+      // session === null is expected when email confirmation is enabled
+      if (!session && user) {
+        setNeedsConfirmation(true);
+        setSuccess(true);
+        setError('');
+      } else if (session) {
+        // Auto-confirmed, redirect
+        router.push('/');
       }
     } catch (err) {
-      // Show common client errors, log backend/unknown errors
-      if (err.message && (
-        err.message.includes("Passwords do not match") ||
-        err.message.includes("Email and password required") ||
-        err.message.includes("Invalid email format") ||
-        err.message.includes("Password too short")
-      )) {
-        setError(err.message);
+      if (err.message?.includes('already registered')) {
+        setError('This email is already registered. Try logging in instead.');
+      } else if (err.message?.includes('Password should be')) {
+        setError('Password is too weak. Use a stronger password.');
       } else {
-        setError("Registration error");
-        // Log unexpected/backend errors for debugging
-        console.error("Registration error:", err);
+        setError(err.message || 'Registration failed');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    setLoading(true);
+    try {
+      await resendConfirmation(formData.email);
+      alert('Confirmation email resent! Check your inbox.');
+    } catch (err) {
+      setError(err.message || 'Failed to resend confirmation');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const { url } = await signInWithOAuth('google', {
+        skipBrowserRedirect: true,
+      });
+      if (url) window.location.assign(url);
+    } catch (err) {
+      setError(err.message || 'Google sign-up failed');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Layout>
-      {/* Show error message if registration fails */}
-      {error && (
-        <div className="mb-4 text-red-600 text-center">{error}</div>
-      )}
       <Head>
         <title>Register - Cartify</title>
         <meta name="description" content="Create your Cartify account" />
@@ -93,7 +113,49 @@ export default function Register() {
               <p className="text-gray-600">Join Cartify today</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            {success && needsConfirmation ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-green-50 border border-green-200 rounded-md">
+                  <h3 className="font-semibold text-green-800 mb-2">Check your email!</h3>
+                  <p className="text-sm text-green-700">
+                    We've sent a confirmation email to <strong>{formData.email}</strong>.
+                    Please click the link in the email to activate your account.
+                  </p>
+                </div>
+                <button
+                  onClick={handleResendConfirmation}
+                  disabled={loading}
+                  className="w-full btn-secondary disabled:opacity-50"
+                >
+                  {loading ? 'Sending...' : 'Resend Confirmation Email'}
+                </button>
+                <Link href="/account/login" className="block text-center text-primary-600 hover:text-primary-700">
+                  Go to Login
+                </Link>
+              </div>
+            ) : (
+              <>
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-600 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignup}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none disabled:opacity-50"
+                  >
+                    <span>{loading ? 'Loading...' : 'Continue with Google'}</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-gray-200" />
+                    <span className="text-xs uppercase text-gray-400">or</span>
+                    <div className="h-px flex-1 bg-gray-200" />
+                  </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="firstName" className="block text-sm font-medium mb-2">
@@ -204,6 +266,8 @@ export default function Register() {
                 Create Account
               </motion.button>
             </form>
+              </>
+            )}
 
             <div className="mt-6">
               <div className="relative">
