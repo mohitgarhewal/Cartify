@@ -4,9 +4,16 @@ import Layout from '@/components/Layout';
 import ProductCard from '@/components/ProductCard';
 import { products } from '@/data/products';
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 export default function Home() {
   const featuredProducts = products.filter((p) => p.featured).slice(0, 4);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 500);
+    return () => clearTimeout(t);
+  }, []);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -36,6 +43,14 @@ export default function Home() {
 
   return (
     <Layout>
+      {loading && (
+        <div className="fixed inset-0 z-40 bg-white/90 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+            <p className="text-sm font-medium text-primary-700">Loading awesome deals...</p>
+          </div>
+        </div>
+      )}
       <Head>
         <title>Cartify - Your One-Stop Shop for Quality Products</title>
         <meta

@@ -232,7 +232,7 @@ export default function ProductDetail() {
                 </div>
 
                 {/* Add to Cart Button */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
