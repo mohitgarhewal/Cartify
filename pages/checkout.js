@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '@/lib/apiClient';
-import { getToken } from '@/lib/auth';
-import { isLoggedIn } from '@/lib/auth'; // Import auth utility
+import { useAuth } from '@/hooks/useAuth';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
@@ -11,6 +10,8 @@ import { motion } from 'framer-motion';
 export default function Checkout() {
   const router = useRouter();
   const { cart, getCartTotal, clearCart } = useCart();
+  const { user, session, isLoading: authLoading } = useAuth();
+  const [paymentMethod, setPaymentMethod] = useState('razorpay');
   const [formData, setFormData] = useState({
     email: '',
     firstName: '',
@@ -26,18 +27,29 @@ export default function Checkout() {
     cvv: '',
   });
 
+  // Load Razorpay script lazily
+  const loadRazorpay = () => {
+    return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined') return reject('window missing');
+      if (window.Razorpay) return resolve(true);
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => reject('Failed to load Razorpay SDK');
+      document.body.appendChild(script);
+    });
+  };
+
   useEffect(() => {
-    // Protect this route: redirect to login if not authenticated
-    if (!isLoggedIn()) {
-      // Interview: Protects checkout, only logged-in users can access
+    if (authLoading) return;
+    if (!user) {
       router.replace('/account/login');
       return;
     }
-    // Existing logic: redirect to cart if cart is empty
     if (cart.length === 0) {
       router.push('/cart');
     }
-  }, [cart.length, router]);
+  }, [authLoading, user, cart.length, router]);
 
   const handleChange = (e) => {
     setFormData({
@@ -54,24 +66,80 @@ export default function Checkout() {
     setError("");
     setLoading(true);
     try {
-      // Prepare order data
-      const orderData = {
+      const total = getCartTotal();
+      const shipping = total > 50 ? 0 : 9.99;
+      const tax = total * 0.08;
+      const grandTotal = total + shipping + tax;
+
+      const orderPayload = {
         ...formData,
         items: cart,
-        total: getCartTotal(),
+        total: grandTotal,
+        paymentMethod,
       };
-      // Send order to backend, include auth token
-      await apiRequest("/orders", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-        },
-        body: JSON.stringify(orderData),
+
+      const authHeader = session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {};
+
+      if (paymentMethod === 'cod') {
+        await apiRequest('/orders', {
+          method: 'POST',
+          headers: authHeader,
+          body: JSON.stringify(orderPayload),
+        });
+        clearCart();
+        router.push('/');
+        return;
+      }
+
+      // Razorpay flow
+      await loadRazorpay();
+      const order = await apiRequest('/payments/order', {
+        method: 'POST',
+        body: JSON.stringify({ amount: Math.round(grandTotal * 100), currency: 'INR' }),
       });
-      clearCart();
-      router.push("/");
+
+      const rzp = new window.Razorpay({
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Cartify',
+        description: 'Order Payment',
+        order_id: order.orderId,
+        prefill: {
+          name: `${formData.firstName} ${formData.lastName}`.trim(),
+          email: formData.email,
+        },
+        handler: async (response) => {
+          try {
+            // Optional: verify signature on backend
+            await apiRequest('/payments/verify', {
+              method: 'POST',
+              body: JSON.stringify(response),
+            });
+
+            await apiRequest('/orders', {
+              method: 'POST',
+              headers: authHeader,
+              body: JSON.stringify({ ...orderPayload, paymentStatus: 'paid', razorpay: response }),
+            });
+            clearCart();
+            router.push('/');
+          } catch (err) {
+            console.error('Payment capture error', err);
+            setError(err.message || 'Payment failed');
+          }
+        },
+        theme: { color: '#4f46e5' },
+        modal: {
+          ondismiss: () => setLoading(false),
+        },
+      });
+
+      rzp.open();
     } catch (err) {
-      setError(err.message || "Checkout failed");
+      setError(err.message || 'Checkout failed');
     } finally {
       setLoading(false);
     }
@@ -246,81 +314,35 @@ export default function Checkout() {
                   </div>
                 </motion.div>
 
-                {/* Payment Information */}
+                {/* Payment Method */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
                   className="bg-white rounded-lg shadow-sm p-6"
                 >
-                  <h2 className="text-xl font-bold mb-4">Payment Information</h2>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                    <p className="text-sm text-yellow-800">
-                      ⚠️ This is a demo. Do not enter real payment information.
-                    </p>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Card Number
-                      </label>
+                  <h2 className="text-xl font-bold mb-4">Payment Method</h2>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3">
                       <input
-                        type="text"
-                        name="cardNumber"
-                        value={formData.cardNumber}
-                        onChange={handleChange}
-                        required
-                        className="input-field"
-                        placeholder="1234 5678 9012 3456"
-                        maxLength="19"
+                        type="radio"
+                        name="paymentMethod"
+                        value="razorpay"
+                        checked={paymentMethod === 'razorpay'}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Cardholder Name
-                      </label>
+                      <span className="font-medium">Razorpay (Card/UPI/NetBanking)</span>
+                    </label>
+                    <label className="flex items-center gap-3">
                       <input
-                        type="text"
-                        name="cardName"
-                        value={formData.cardName}
-                        onChange={handleChange}
-                        required
-                        className="input-field"
-                        placeholder="John Doe"
+                        type="radio"
+                        name="paymentMethod"
+                        value="cod"
+                        checked={paymentMethod === 'cod'}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Expiry Date
-                        </label>
-                        <input
-                          type="text"
-                          name="expiryDate"
-                          value={formData.expiryDate}
-                          onChange={handleChange}
-                          required
-                          className="input-field"
-                          placeholder="MM/YY"
-                          maxLength="5"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-2">CVV</label>
-                        <input
-                          type="text"
-                          name="cvv"
-                          value={formData.cvv}
-                          onChange={handleChange}
-                          required
-                          className="input-field"
-                          placeholder="123"
-                          maxLength="4"
-                        />
-                      </div>
-                    </div>
+                      <span className="font-medium">Cash on Delivery</span>
+                    </label>
                   </div>
                 </motion.div>
               </div>

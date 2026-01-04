@@ -55,6 +55,7 @@ app.use('/categories', safeRequire('./routes/categories'));
 app.use('/cart', safeRequire('./routes/cart'));
 app.use('/orders', safeRequire('./routes/orders'));
 app.use('/admin', safeRequire('./routes/admin'));
+app.use('/payments', safeRequire('./routes/payments'));
 app.use('/webhooks', safeRequire('./routes/webhooks'));
 
 // Health check endpoint

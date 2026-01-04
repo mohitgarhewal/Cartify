@@ -47,6 +47,19 @@ export default function ProductDetail() {
     setTimeout(() => setShowAddedToCart(false), 3000);
   };
 
+  const handleBuyNow = () => {
+    if (product.colors.length > 0 && !selectedColor) {
+      alert('Please select a color');
+      return;
+    }
+    if (product.sizes.length > 0 && !selectedSize) {
+      alert('Please select a size');
+      return;
+    }
+    addToCart(product, quantity, selectedColor, selectedSize);
+    router.push('/checkout?source=buy-now');
+  };
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -233,6 +246,17 @@ export default function ProductDetail() {
                   >
                     {product.inStock ? 'Add to Cart' : 'Out of Stock'}
                   </motion.button>
+
+                  {product.inStock && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleBuyNow}
+                      className="w-full py-4 rounded-lg font-semibold text-lg transition-colors bg-white border border-primary-600 text-primary-600 hover:bg-primary-50"
+                    >
+                      Buy Now
+                    </motion.button>
+                  )}
 
                   {/* Added to Cart Notification */}
                   <AnimatePresence>
