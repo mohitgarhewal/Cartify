@@ -167,7 +167,49 @@ Update `NEXT_PUBLIC_API_URL` to point to your deployed backend URL.
 2. Add your production domain to Supabase Auth > URL Configuration
 3. Update Google OAuth redirect URIs with production URLs
 
-## 📁 Folder Structure
+## � Troubleshooting
+
+### Build Error: "supabaseUrl is required"
+
+If you encounter this error during Vercel deployment:
+
+```
+Error: supabaseUrl is required.
+Build error occurred
+Error: Failed to collect page data for /404
+```
+
+**Solution:**
+
+1. **Add Environment Variables in Vercel:**
+   - Go to your Vercel project dashboard
+   - Navigate to **Settings** > **Environment Variables**
+   - Add the following variables:
+     - `NEXT_PUBLIC_SUPABASE_URL` = Your Supabase project URL
+     - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = Your Supabase anon/public key
+     - `NEXT_PUBLIC_API_URL` = Your backend API URL
+
+2. **Redeploy:**
+   - After adding environment variables, trigger a new deployment
+   - Go to **Deployments** tab and click **Redeploy**
+
+3. **Verify Environment Variables:**
+   - Check that all variable names start with `NEXT_PUBLIC_` for client-side access
+   - Ensure there are no trailing spaces in variable names or values
+   - Confirm values are copied correctly from Supabase dashboard
+
+4. **Local Testing:**
+   ```bash
+   npm run build
+   ```
+   If it builds successfully locally, the issue is with Vercel environment variables.
+
+**Common Mistakes:**
+- ❌ Forgetting to add `NEXT_PUBLIC_` prefix
+- ❌ Using `.env.local` values instead of production Supabase credentials
+- ❌ Not redeploying after adding environment variables
+
+## �📁 Folder Structure
 
 ```
 Cartify/
