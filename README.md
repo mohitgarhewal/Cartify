@@ -212,13 +212,4 @@ Cartify/
 - ✅ Multi-language support
 - ✅ Customer support chat
 
-## 👨‍💻 Author
-
-**Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your LinkedIn](https://linkedin.com/in/yourprofile)
-- Portfolio: [yourwebsite.com](https://yourwebsite.com)
-
----
-
 **Built with ❤️ using Next.js and Supabase**
